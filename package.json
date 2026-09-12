@@ -11,7 +11,7 @@
     "dev:web": "pnpm --filter @navigation/web dev",
     "dev:api": "pnpm --filter @navigation/api start:dev",
     "build": "pnpm -r build",
-    "test": "pnpm --filter @navigation/web test && pnpm --filter @navigation/api build && pnpm --filter @navigation/api test",
+    "test": "pnpm --filter @navigation/web test && pnpm --filter @navigation/api test",
     "db:generate": "pnpm --filter @navigation/api prisma:generate",
     "db:migrate": "pnpm --filter @navigation/api prisma:migrate"
   }

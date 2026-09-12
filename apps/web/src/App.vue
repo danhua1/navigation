@@ -60,7 +60,7 @@
             <span class="category-tab-icon" aria-hidden="true">{{ cat.icon }}</span>
             <span>{{ cat.name }}</span><b>{{ cat.sites.length }}</b>
           </button>
-          <div class="category-tab-actions">
+          <div class="category-tab-actions" role="group" :aria-label="`${cat.name} 分类操作`">
             <button type="button" :aria-label="`编辑分类 ${cat.name}`" title="编辑分类" @click="showCategoryModal(cat)">编辑</button>
             <button type="button" :aria-label="`删除分类 ${cat.name}`" title="删除分类" @click="handleDeleteCategory(cat.id)">删除</button>
           </div>
@@ -261,8 +261,6 @@ const searchKeyword = ref('')
 // 实际参与过滤的关键词，比输入框慢一拍，避免每个按键都重建整棵列表
 const activeKeyword = ref('')
 const theme = ref('light')
-const sidebarOpen = ref(false)
-const isMobile = ref(false)
 const authUser = ref(null)
 const authReady = ref(false)
 
@@ -289,25 +287,15 @@ const selectedSiteIds = ref(new Set())
 const expanded = ref({})
 
 // ===== 初始化 =====
-let mediaQuery = null
 let activeUserId = null
 let remoteRevision = 0
 let hydratingData = false
 let remoteSyncBlocked = false
 
-function syncIsMobile(e) {
-  isMobile.value = e.matches
-  if (!e.matches) sidebarOpen.value = false
-}
-
 onMounted(async () => {
   const user = await currentUser()
   authUser.value = user && await activateUser(user) ? user : null
   authReady.value = true
-
-  mediaQuery = window.matchMedia('(max-width: 768px)')
-  syncIsMobile(mediaQuery)
-  mediaQuery.addEventListener('change', syncIsMobile)
 
   // 关闭页面前把挂起的保存补上，否则最后一次改动会丢
   window.addEventListener('pagehide', flushSave)
@@ -331,7 +319,6 @@ function handleLogout() {
 }
 
 onBeforeUnmount(() => {
-  mediaQuery?.removeEventListener('change', syncIsMobile)
   window.removeEventListener('pagehide', flushSave)
   document.removeEventListener('visibilitychange', handleVisibility)
   flushSave()
@@ -597,13 +584,11 @@ function toggleTheme() {
 function handleSelectCategory(id) {
   activeCategoryId.value = id
   clearSearch()
-  sidebarOpen.value = false
 }
 
 function handleShowAll() {
   activeCategoryId.value = null
   clearSearch()
-  sidebarOpen.value = false
 }
 
 function clearSearch() {
@@ -728,7 +713,6 @@ async function handleDeleteSite(categoryId, siteId) {
 function showCategoryModal(category = null) {
   editingCategory.value = category
   categoryModalVisible.value = true
-  sidebarOpen.value = false
 }
 
 function handleSaveCategory(catData) {
@@ -1245,6 +1229,7 @@ async function handleFileSelected(e) {
 .group-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }.group-section { min-width: 0; margin: 0; padding: 18px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 7px; transition: border-color .18s, transform .18s, background .18s; }.group-section.is-drop-target { border-color: var(--accent); background: var(--accent-light); transform: translateY(-2px); }.group-header { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }.group-header h3 { display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--text-primary); }.group-header h3 span { display: grid; min-width: 22px; height: 20px; place-items: center; padding: 0 5px; background: var(--bg-tertiary); border-radius: 3px; color: var(--text-muted); font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; }.group-actions { opacity: .55; }.group-section:hover .group-actions, .group-actions:focus-within { opacity: 1; }.group-action { min-width: 34px; min-height: 34px; padding: 0 7px; width: auto; height: auto; border-radius: 4px; font-size: 12px; }.site-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }.group-empty { min-height: 92px; margin: 0; border-radius: 4px; }.load-more { margin-top: 16px; }
 @media (max-width: 800px) { .topbar { gap: 12px; }.sync-state, .account-button > span:last-child { display: none; }.command-deck { grid-template-columns: 1fr auto; gap: 16px; }.command-deck .search-bar { grid-column: 1 / -1; grid-row: 2; }.collection-summary { align-items: flex-start; flex-direction: column; }.workspace-hint { text-align: left; }.group-list { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .topbar { padding-inline: 14px; }.utility-btn { display: none; }.workspace { padding: 24px 14px 48px; }.command-title h1 { font-size: 26px; }.add-site { padding-inline: 12px; }.category-rail { margin-inline: -14px; padding-inline: 14px; }.category-header { align-items: flex-start; flex-wrap: wrap; }.category-header-actions { margin-left: 0; }.group-section { padding: 14px; } }
+@media (hover: none) { .category-tab-actions { display: flex; position: static; padding: 3px 4px 4px; border: 0; box-shadow: none; background: transparent; } .category-tab-wrap { padding-bottom: 2px; } }
 @media (prefers-reduced-motion: reduce) { .group-section, .category-tab-wrap { transition: none; }.group-section.is-drop-target { transform: none; } }
 </style>
 

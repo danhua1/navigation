@@ -1,8 +1,8 @@
 <template>
   <BaseModal :title="isBulkMove ? '批量移动网站' : '移动网站'" @close="emit('close')">
     <div v-if="isBulkMove" class="bulk-preview">
-      <strong>{{ sites.length }}</strong>
-      <span>个已选择的网站</span>
+      <span class="bulk-preview-mark" aria-hidden="true">{{ sites.length }}</span>
+      <span><strong>已选择 {{ sites.length }} 个网站</strong><small>选择目标分类与分组后统一移动</small></span>
     </div>
     <div v-else-if="site" class="site-preview">
       <span class="site-preview-icon">{{ site.icon || site.name.charAt(0).toUpperCase() }}</span>
@@ -17,17 +17,18 @@
       <div class="current-category">{{ fromCategoryName }}</div>
     </div>
 
-    <div class="form-group">
-      <span class="form-label" :id="`${uid}-label`">目标分类 *</span>
-      <div class="category-list" role="listbox" :aria-labelledby="`${uid}-label`">
+    <div class="form-group destination-block">
+      <div class="field-heading">
+        <span class="form-label" :id="`${uid}-label`">目标分类</span>
+        <span>先选择分类</span>
+      </div>
+      <div class="category-list" :aria-labelledby="`${uid}-label`">
         <button
           v-for="cat in targets"
           :key="cat.id"
           type="button"
           class="category-option"
           :class="{ active: selectedCategoryId === cat.id }"
-          role="option"
-          :aria-selected="selectedCategoryId === cat.id"
           @click="selectCategory(cat.id)"
         >
           <span class="category-option-icon">{{ cat.icon }}</span>
@@ -37,17 +38,18 @@
       </div>
     </div>
 
-    <div class="form-group">
-      <span class="form-label" :id="`${uid}-group-label`">目标分组 *</span>
-      <div class="group-list" role="listbox" :aria-labelledby="`${uid}-group-label`">
+    <div class="form-group destination-block">
+      <div class="field-heading">
+        <span class="form-label" :id="`${uid}-group-label`">目标分组</span>
+        <span>再选择放入位置</span>
+      </div>
+      <div class="group-list" :aria-labelledby="`${uid}-group-label`">
         <button
           v-for="group in selectedGroups"
           :key="group.id"
           type="button"
           class="category-option"
           :class="{ active: selectedGroupId === group.id }"
-          role="option"
-          :aria-selected="selectedGroupId === group.id"
           @click="selectedGroupId = group.id"
           @dblclick="handleMove"
         >
@@ -124,20 +126,43 @@ function handleMove() {
 
 .bulk-preview {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 14px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
   margin-bottom: 16px;
-  border: 1px solid var(--border);
-  background: var(--accent-light);
-  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent-light) 50%, var(--bg-primary));
+  border-radius: 4px;
   color: var(--text-secondary);
 }
 
-.bulk-preview strong {
-  color: var(--accent);
+.bulk-preview-mark {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 4px;
   font-family: 'DM Mono', ui-monospace, monospace;
-  font-size: 24px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bulk-preview strong,
+.bulk-preview small {
+  display: block;
+}
+
+.bulk-preview strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.bulk-preview small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .site-preview-icon {
@@ -181,25 +206,56 @@ function handleMove() {
   color: var(--text-secondary);
 }
 
-.category-list {
+.destination-block {
+  margin-bottom: 20px;
+}
+
+.field-heading {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 280px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.field-heading .form-label {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.field-heading > span:last-child {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.category-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  max-height: 220px;
   overflow-y: auto;
+  padding: 1px;
+}
+
+.group-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
 }
 
 .category-option {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  min-height: 52px;
+  padding: 9px 11px;
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 14px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
   text-align: left;
 }
 
@@ -228,12 +284,33 @@ function handleMove() {
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .category-option.active .category-option-count {
   background: var(--accent);
   color: #fff;
+}
+
+:deep(.modal) {
+  max-width: 640px;
+}
+
+:deep(.modal-body) {
+  padding-top: 16px;
+  padding-bottom: 12px;
+}
+
+:deep(.modal-footer) {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 520px) {
+  .category-list,
+  .group-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -143,8 +143,8 @@ ul {
 
 .btn-primary {
   background: var(--accent);
-  color: #fff;
-  box-shadow: 0 2px 0 rgba(19, 78, 74, 0.25);
+  color: var(--on-accent);
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--text-primary) 20%, transparent);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);

@@ -53,6 +53,12 @@ const grouped = sanitizeData({ categories: [{ id: 'legacy', name: 'Legacy', site
 ok(grouped.groups.map(group => group.name).join(',') === '常用,非常用', '旧数据自动获得默认分组')
 ok(grouped.sites[0].groupId === grouped.groups[0].id, '旧网站自动归入常用分组')
 
+// 损坏的 groupId 不能让网站在页面中消失，应自动回退到第一个有效分组。
+const repairedGroup = sanitizeData({ categories: [{ id: 'group-repair', name: 'Repair', groups: [
+  { id: 'common', name: '常用' }, { id: 'rare', name: '非常用' }
+], sites: [{ id: 'repair-site', name: 'Repair site', url: 'https://repair.example', groupId: 'missing' }] }] }).data.categories[0]
+ok(repairedGroup.sites[0].groupId === 'common', '无效分组引用自动回退到首个有效分组')
+
 // --- 站点上的历史 categoryId 不应被保留 ---
 const leak = sanitizeData({ categories: [{ id: 'c', name: 'C', sites: [
   { id: 's', name: 'S', url: 'https://s.com', categoryId: 'stale-cat' }
@@ -74,6 +80,8 @@ const allGroups = merged.flatMap(c => c.groups.map(group => group.id))
 ok(new Set(allCat).size === allCat.length, `追加后分类 id 全局唯一（${allCat.length} 个）`)
 ok(new Set(allSite).size === allSite.length, `追加后站点 id 全局唯一（${allSite.length} 个）`)
 ok(new Set(allGroups).size === allGroups.length, `追加后分组 id 全局唯一（${allGroups.length} 个）`)
+const appended = merged[1]
+ok(appended.sites[0].groupId === appended.groups[0].id, '追加导入后网站仍关联到重发后的分组 ID')
 
 // 大批量：Date.now() 相同的情况下也不能撞
 const big = sanitizeData({ categories: Array.from({ length: 40 }, (_, i) => ({
