@@ -46,6 +46,13 @@ ok(r.data.version === 1, 'version 已写入')
 ok(sanitizeData(null).data.categories.length === 0, 'null 输入不抛错')
 ok(sanitizeData({}).data.categories.length === 0, '空对象不抛错')
 
+// 旧版分类没有分组时，自动升级为「常用 / 非常用」，并把原有网站放进常用。
+const grouped = sanitizeData({ categories: [{ id: 'legacy', name: 'Legacy', sites: [
+  { id: 'legacy-site', name: 'Site', url: 'https://legacy.example' }
+]}] }).data.categories[0]
+ok(grouped.groups.map(group => group.name).join(',') === '常用,非常用', '旧数据自动获得默认分组')
+ok(grouped.sites[0].groupId === grouped.groups[0].id, '旧网站自动归入常用分组')
+
 // --- 站点上的历史 categoryId 不应被保留 ---
 const leak = sanitizeData({ categories: [{ id: 'c', name: 'C', sites: [
   { id: 's', name: 'S', url: 'https://s.com', categoryId: 'stale-cat' }
@@ -63,8 +70,10 @@ const again = sanitizeData({ categories: [
 const merged = [...base, ...reindexForAppend(again, base)]
 const allCat = merged.map(c => c.id)
 const allSite = merged.flatMap(c => c.sites.map(s => s.id))
+const allGroups = merged.flatMap(c => c.groups.map(group => group.id))
 ok(new Set(allCat).size === allCat.length, `追加后分类 id 全局唯一（${allCat.length} 个）`)
 ok(new Set(allSite).size === allSite.length, `追加后站点 id 全局唯一（${allSite.length} 个）`)
+ok(new Set(allGroups).size === allGroups.length, `追加后分组 id 全局唯一（${allGroups.length} 个）`)
 
 // 大批量：Date.now() 相同的情况下也不能撞
 const big = sanitizeData({ categories: Array.from({ length: 40 }, (_, i) => ({

@@ -1,5 +1,5 @@
 <template>
-  <div class="site-card">
+  <div class="site-card" draggable="true" @dragstart="startDrag" @dragend="dragging = false" :class="{ dragging }">
     <div class="site-icon" :style="{ background: iconBg }" aria-hidden="true">
       <!-- 优先使用用户提供的安全内嵌图标；否则试读站点自身 favicon。 -->
       <img
@@ -32,21 +32,21 @@
         :aria-label="`移动 ${site.name} 到其他分类`"
         title="移动到其他分类"
         @click="$emit('move', site)"
-      >📁</button>
+      >↗</button>
       <button
         class="card-action-btn"
         type="button"
         :aria-label="`编辑 ${site.name}`"
         title="编辑"
         @click="$emit('edit', site)"
-      >✏️</button>
+      >✎</button>
       <button
         class="card-action-btn"
         type="button"
         :aria-label="`删除 ${site.name}`"
         title="删除"
         @click="$emit('delete', site.id)"
-      >🗑️</button>
+      >⌫</button>
     </div>
   </div>
 </template>
@@ -59,7 +59,15 @@ const props = defineProps({
   site: { type: Object, required: true }
 })
 
-defineEmits(['edit', 'delete', 'move'])
+const emit = defineEmits(['edit', 'delete', 'move', 'dragstart'])
+const dragging = ref(false)
+
+function startDrag(event) {
+  dragging.value = true
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', props.site.id)
+  emit('dragstart', props.site)
+}
 
 const isEmbeddedImage = computed(() => /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(props.site.icon || ''))
 const iconText = computed(() => {
@@ -110,11 +118,11 @@ const iconBg = computed(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px;
+  padding: 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
   position: relative;
 }
 
@@ -125,10 +133,14 @@ const iconBg = computed(() => {
   transform: translateY(-2px);
 }
 
+.site-card.dragging {
+  opacity: 0.45;
+}
+
 .site-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,8 +152,8 @@ const iconBg = computed(() => {
 }
 
 .site-favicon {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   /* 图标底色可能与站点 favicon 撞色，留白衬底更清晰 */
   border-radius: 4px;
   background: #fff;
@@ -194,7 +206,7 @@ const iconBg = computed(() => {
   background: var(--bg-secondary);
   padding: 2px;
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
+  box-shadow: 0 2px 8px rgba(19, 78, 74, 0.1);
   /* 浮在铺满卡片的链接之上 */
   z-index: 1;
   opacity: 0;
@@ -220,7 +232,9 @@ const iconBg = computed(() => {
 .card-action-btn {
   background: none;
   border: none;
-  padding: 4px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 5px;
   font-size: 12px;
   border-radius: 4px;
   opacity: 0.6;

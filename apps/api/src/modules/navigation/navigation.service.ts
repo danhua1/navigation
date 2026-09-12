@@ -5,13 +5,21 @@ import { PrismaService } from '../../prisma/prisma.service'
 const MAX_DATA_BYTES = 1024 * 1024
 const MAX_CATEGORIES = 500
 const MAX_SITES_PER_CATEGORY = 5000
+const MAX_GROUPS_PER_CATEGORY = 100
 const MAX_TEXT_LENGTH = { categoryName: 60, siteName: 120, description: 300, icon: 16 }
+const IMAGE_DATA_URL_RE = /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/]+={0,2}$/i
 
 function hasOnlyKeys(value: Record<string, unknown>, keys: string[]) {
   return Object.keys(value).every(key => keys.includes(key))
 }
 
-function validateNavigationData(data: Record<string, unknown>) {
+function isValidSiteIcon(icon: unknown) {
+  if (typeof icon !== 'string') return false
+  // 普通图标仍按短文本处理；书签导出的安全位图图标受整份导航数据 1MB 上限约束。
+  return icon.length <= MAX_TEXT_LENGTH.icon || IMAGE_DATA_URL_RE.test(icon)
+}
+
+export function validateNavigationData(data: Record<string, unknown>) {
   const version = data.version
   if (!hasOnlyKeys(data, ['version', 'categories', 'settings']) ||
       typeof version !== 'number' || !Number.isInteger(version) || version < 1 || version > 1) {
@@ -31,7 +39,7 @@ function validateNavigationData(data: Record<string, unknown>) {
       throw new BadRequestException('分类数据格式不正确')
     }
     const cat = category as Record<string, unknown>
-    if (!hasOnlyKeys(cat, ['id', 'name', 'icon', 'sites'])) {
+    if (!hasOnlyKeys(cat, ['id', 'name', 'icon', 'groups', 'sites'])) {
       throw new BadRequestException('分类包含不支持的字段')
     }
     if (typeof cat.id !== 'string' || cat.id.length === 0 || cat.id.length > 64 || categoryIds.has(cat.id)) {
@@ -44,6 +52,23 @@ function validateNavigationData(data: Record<string, unknown>) {
     if (typeof cat.icon !== 'string' || cat.icon.length > MAX_TEXT_LENGTH.icon) {
       throw new BadRequestException('分类图标不合法')
     }
+    const groupIds = new Set<string>()
+    if (cat.groups !== undefined) {
+      if (!Array.isArray(cat.groups) || cat.groups.length === 0 || cat.groups.length > MAX_GROUPS_PER_CATEGORY) {
+        throw new BadRequestException('分类分组数据不合法或数量过多')
+      }
+      for (const group of cat.groups) {
+        if (!group || typeof group !== 'object' || Array.isArray(group)) {
+          throw new BadRequestException('分组数据格式不正确')
+        }
+        const item = group as Record<string, unknown>
+        if (!hasOnlyKeys(item, ['id', 'name']) || typeof item.id !== 'string' || item.id.length === 0 || item.id.length > 64 || groupIds.has(item.id) ||
+            typeof item.name !== 'string' || item.name.length === 0 || item.name.length > 48) {
+          throw new BadRequestException('分组字段不合法')
+        }
+        groupIds.add(item.id)
+      }
+    }
     if (!Array.isArray(cat.sites) || cat.sites.length > MAX_SITES_PER_CATEGORY) {
       throw new BadRequestException('分类网站数据不合法或数量过多')
     }
@@ -52,7 +77,7 @@ function validateNavigationData(data: Record<string, unknown>) {
         throw new BadRequestException('网站数据格式不正确')
       }
       const item = site as Record<string, unknown>
-      if (!hasOnlyKeys(item, ['id', 'name', 'url', 'description', 'icon'])) {
+      if (!hasOnlyKeys(item, ['id', 'name', 'url', 'description', 'icon', 'groupId'])) {
         throw new BadRequestException('网站包含不支持的字段')
       }
       if (typeof item.id !== 'string' || item.id.length === 0 || item.id.length > 64 || siteIds.has(item.id)) {
@@ -72,8 +97,11 @@ function validateNavigationData(data: Record<string, unknown>) {
         throw new BadRequestException('网站地址仅支持有效的 http/https 地址')
       }
       if (typeof item.description !== 'string' || item.description.length > MAX_TEXT_LENGTH.description ||
-          typeof item.icon !== 'string' || item.icon.length > MAX_TEXT_LENGTH.icon) {
+          !isValidSiteIcon(item.icon)) {
         throw new BadRequestException('网站字段长度不合法')
+      }
+      if (item.groupId !== undefined && (typeof item.groupId !== 'string' || !groupIds.has(item.groupId))) {
+        throw new BadRequestException('网站分组不合法')
       }
     }
   }

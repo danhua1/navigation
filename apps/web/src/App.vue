@@ -29,7 +29,7 @@
       <!-- 顶部搜索栏 -->
       <header class="app-header">
         <div class="search-bar">
-          <span class="search-icon" aria-hidden="true">🔍</span>
+          <span class="search-icon" aria-hidden="true">⌕</span>
           <input
             v-model="searchKeyword"
             class="search-input"
@@ -43,7 +43,7 @@
             type="button"
             aria-label="清空搜索"
             @click="clearSearch"
-          >✕</button>
+          >×</button>
         </div>
         <div class="header-actions">
           <button
@@ -53,16 +53,16 @@
             :title="theme === 'light' ? '暗色模式' : '亮色模式'"
             @click="toggleTheme"
           >
-            {{ theme === 'light' ? '🌙' : '☀️' }}
+            {{ theme === 'light' ? '☾' : '☀' }}
           </button>
           <button class="btn btn-ghost" type="button" title="导入 JSON 备份" @click="triggerImport">
-            <span aria-hidden="true">📥</span><span class="btn-label">导入</span>
+            <span aria-hidden="true">↓</span><span class="btn-label">导入</span>
           </button>
           <button class="btn btn-ghost" type="button" title="导出 JSON 备份" @click="handleExport">
-            <span aria-hidden="true">📤</span><span class="btn-label">导出</span>
+            <span aria-hidden="true">↑</span><span class="btn-label">导出</span>
           </button>
           <button class="btn btn-primary" type="button" @click="showSiteModal()">
-            <span aria-hidden="true">+</span><span class="btn-label">添加网站</span>
+            <span aria-hidden="true">＋</span><span class="btn-label">添加网站</span>
           </button>
           <button class="btn btn-ghost" type="button" title="退出登录" @click="handleLogout">
             <span class="btn-label">{{ authUser.username }}</span><span aria-hidden="true">↪</span>
@@ -80,6 +80,13 @@
 
       <!-- 站点列表 -->
       <main class="content">
+        <div v-if="!emptyState" class="collection-summary">
+          <div>
+            <p class="eyebrow">收藏导航</p>
+            <h1>{{ collectionTitle }}</h1>
+          </div>
+          <p class="collection-meta">{{ collectionMeta }}</p>
+        </div>
         <div v-if="emptyState" class="empty-state">
           <div class="icon" aria-hidden="true">{{ emptyState.icon }}</div>
           <div class="title">{{ emptyState.title }}</div>
@@ -97,28 +104,58 @@
               {{ category.name }}
               <span class="site-count">{{ category.sites.length }}</span>
             </h2>
-            <button
-              class="btn btn-ghost btn-sm"
-              type="button"
-              @click="showSiteModal(null, category.id)"
-            >
-              + 添加
-            </button>
+            <div class="category-header-actions">
+              <button
+                class="btn btn-ghost btn-sm"
+                type="button"
+                @click="showGroupModal(category.id)"
+              >
+                ＋ 分组
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                type="button"
+                @click="showSiteModal(null, category.id)"
+              >
+                ＋ 网站
+              </button>
+            </div>
           </div>
 
           <div v-if="category.sites.length === 0" class="category-empty">
             这个分类还没有网站
           </div>
 
-          <div v-else class="site-grid">
-            <SiteCard
-              v-for="site in visibleSites(category)"
-              :key="site.id"
-              :site="site"
-              @edit="showSiteModal(site, category.id)"
-              @delete="handleDeleteSite(category.id, $event)"
-              @move="showMoveModal(site, category.id)"
-            />
+          <div v-else class="group-list">
+            <section
+              v-for="group in visibleGroups(category)"
+              :key="group.id"
+              class="group-section"
+              :class="{ 'is-drop-target': dropTargetGroupId === group.id }"
+              @dragover.prevent="dropTargetGroupId = group.id"
+              @dragleave="dropTargetGroupId = null"
+              @drop="dropSite(category.id, group.id)"
+            >
+              <div class="group-header">
+                <h3>{{ group.name }} <span>{{ sitesForGroup(category, group.id).length }}</span></h3>
+                <div class="group-actions">
+                  <button type="button" class="group-action" :aria-label="`编辑分组 ${group.name}`" title="编辑分组" @click="showGroupModal(category.id, group)">✎</button>
+                  <button type="button" class="group-action" :aria-label="`删除分组 ${group.name}`" title="删除分组" @click="handleDeleteGroup(category.id, group.id)">⌫</button>
+                </div>
+              </div>
+              <div class="site-grid">
+                <SiteCard
+                  v-for="site in visibleSitesForGroup(category, group.id)"
+                  :key="site.id"
+                  :site="site"
+                  @edit="showSiteModal(site, category.id)"
+                  @delete="handleDeleteSite(category.id, $event)"
+                  @move="showMoveModal(site, category.id)"
+                  @dragstart="draggedSiteId = $event.id"
+                />
+              </div>
+              <p v-if="sitesForGroup(category, group.id).length === 0" class="group-empty">将网站拖到这里，或通过“移动”操作归类。</p>
+            </section>
           </div>
 
           <!-- 大分类分批渲染，避免一次挂载上千个卡片 -->
@@ -141,6 +178,7 @@
       :site="editingSite"
       :categories="data.categories"
       :default-category-id="siteModalCategoryId"
+      :default-group-id="siteModalGroupId"
       @close="siteModalVisible = false"
       @save="handleSaveSite"
     />
@@ -162,6 +200,13 @@
       @move="handleMoveSite"
     />
 
+    <GroupModal
+      v-if="groupModalVisible"
+      :group="editingGroup"
+      @close="groupModalVisible = false"
+      @save="handleSaveGroup"
+    />
+
     <ConfirmDialog />
     <ToastHost />
   </div>
@@ -174,6 +219,7 @@ import SiteCard from './components/SiteCard.vue'
 import SiteModal from './components/SiteModal.vue'
 import CategoryModal from './components/CategoryModal.vue'
 import MoveModal from './components/MoveModal.vue'
+import GroupModal from './components/GroupModal.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ToastHost from './components/ToastHost.vue'
 import AuthView from './components/AuthView.vue'
@@ -215,11 +261,17 @@ const authReady = ref(false)
 const siteModalVisible = ref(false)
 const categoryModalVisible = ref(false)
 const moveModalVisible = ref(false)
+const groupModalVisible = ref(false)
 const editingSite = ref(null)
 const editingCategory = ref(null)
 const siteModalCategoryId = ref(null)
+const siteModalGroupId = ref(null)
 const movingSite = ref(null)
 const movingSiteFromCategoryId = ref(null)
+const editingGroup = ref(null)
+const editingGroupCategoryId = ref(null)
+const draggedSiteId = ref(null)
+const dropTargetGroupId = ref(null)
 const fileInput = ref(null)
 
 // 每个分类已展开的数量
@@ -323,6 +375,27 @@ async function persist(snapshot, userId) {
   await remoteSaveChain
 }
 
+async function persistNow() {
+  const snapshot = structuredClone(toRaw(data.value))
+  const local = saveData(snapshot, activeUserId)
+  if (!local.ok) throw new Error(local.error)
+  if (!activeUserId) return false
+
+  debouncedPersist.cancel()
+  try {
+    const result = await saveNavigationData(snapshot, remoteRevision)
+    remoteRevision = result.revision
+    return true
+  } catch (error) {
+    if (error.status === 401) {
+      clearToken()
+      activeUserId = null
+      authUser.value = null
+    }
+    throw error
+  }
+}
+
 const debouncedPersist = debounce(persist, SAVE_DELAY)
 let lastRemoteSaveError = ''
 
@@ -420,6 +493,20 @@ const filteredCategories = computed(() => {
   return result
 })
 
+const visibleSiteCount = computed(() =>
+  filteredCategories.value.reduce((sum, category) => sum + category.sites.length, 0)
+)
+
+const collectionTitle = computed(() => {
+  if (activeKeyword.value) return `“${activeKeyword.value}”的搜索结果`
+  if (activeCategoryId.value) {
+    return data.value.categories.find(category => category.id === activeCategoryId.value)?.name || '收藏导航'
+  }
+  return '全部链接'
+})
+
+const collectionMeta = computed(() => `${visibleSiteCount.value} 个网站 · ${filteredCategories.value.length} 个分类`)
+
 const emptyState = computed(() => {
   if (filteredCategories.value.length > 0) return null
   if (activeKeyword.value) {
@@ -439,17 +526,32 @@ function limitFor(categoryId) {
   return expanded.value[categoryId] || PAGE_SIZE
 }
 
-function visibleSites(category) {
-  if (category.sites.length <= limitFor(category.id)) return category.sites
-  return category.sites.slice(0, limitFor(category.id))
+function sitesForGroup(category, groupId) {
+  return category.sites.filter(site => site.groupId === groupId)
+}
+
+function visibleGroups(category) {
+  if (!activeKeyword.value) return category.groups
+  return category.groups.filter(group => sitesForGroup(category, group.id).length > 0)
+}
+
+function visibleSitesForGroup(category, groupId) {
+  const sites = sitesForGroup(category, groupId)
+  const limit = limitFor(`${category.id}:${groupId}`)
+  return sites.length <= limit ? sites : sites.slice(0, limit)
 }
 
 function hiddenCount(category) {
-  return Math.max(0, category.sites.length - limitFor(category.id))
+  return category.groups.reduce((count, group) =>
+    count + Math.max(0, sitesForGroup(category, group.id).length - limitFor(`${category.id}:${group.id}`)), 0)
 }
 
 function showMore(categoryId) {
-  expanded.value[categoryId] = limitFor(categoryId) + PAGE_SIZE
+  const category = data.value.categories.find(item => item.id === categoryId)
+  for (const group of category?.groups || []) {
+    const key = `${categoryId}:${group.id}`
+    expanded.value[key] = limitFor(key) + PAGE_SIZE
+  }
 }
 
 // ===== 主题 =====
@@ -492,10 +594,65 @@ function showSiteModal(site = null, categoryId = null) {
   editingSite.value = site
   // 编辑时以站点实际所在分类为准，而不是站点对象上可能过期的字段
   siteModalCategoryId.value = site ? findCategoryOfSite(site.id)?.id || categoryId : categoryId
+  siteModalGroupId.value = site?.groupId || null
   siteModalVisible.value = true
 }
 
-function handleSaveSite({ site, categoryId }) {
+function showGroupModal(categoryId, group = null) {
+  editingGroupCategoryId.value = categoryId
+  editingGroup.value = group
+  groupModalVisible.value = true
+}
+
+function handleSaveGroup(group) {
+  const category = data.value.categories.find(item => item.id === editingGroupCategoryId.value)
+  if (!category) return
+  if (group.id) {
+    const target = category.groups.find(item => item.id === group.id)
+    if (target) target.name = group.name
+    toast.success('分组已更新')
+  } else {
+    category.groups.push({ id: generateId('group'), name: group.name })
+    toast.success(`已创建「${group.name}」`)
+  }
+  groupModalVisible.value = false
+}
+
+async function handleDeleteGroup(categoryId, groupId) {
+  const category = data.value.categories.find(item => item.id === categoryId)
+  const group = category?.groups.find(item => item.id === groupId)
+  if (!category || !group) return
+  if (category.groups.length <= 1) {
+    toast.error('每个分类至少需要保留一个分组')
+    return
+  }
+  const destination = category.groups.find(item => item.id !== groupId)
+  const count = sitesForGroup(category, groupId).length
+  const ok = await askDanger({
+    title: '删除分组',
+    message: count > 0 ? `「${group.name}」中的 ${count} 个网站将转入「${destination.name}」。` : `确定删除「${group.name}」？`,
+    confirmLabel: '删除分组'
+  })
+  if (!ok) return
+  for (const site of category.sites) {
+    if (site.groupId === groupId) site.groupId = destination.id
+  }
+  category.groups = category.groups.filter(item => item.id !== groupId)
+  delete expanded.value[`${categoryId}:${groupId}`]
+  toast.success('分组已删除')
+}
+
+function dropSite(categoryId, groupId) {
+  const category = data.value.categories.find(item => item.id === categoryId)
+  const site = category?.sites.find(item => item.id === draggedSiteId.value)
+  dropTargetGroupId.value = null
+  draggedSiteId.value = null
+  if (!site || site.groupId === groupId) return
+  site.groupId = groupId
+  toast.success('网站已移动到分组')
+}
+
+function handleSaveSite({ site, categoryId, groupId }) {
   const target = data.value.categories.find(c => c.id === categoryId)
   if (!target) {
     toast.error('目标分类不存在')
@@ -510,14 +667,14 @@ function handleSaveSite({ site, categoryId }) {
     }
     const idx = source.sites.findIndex(s => s.id === site.id)
     if (source.id === categoryId) {
-      source.sites[idx] = { ...site }
+      source.sites[idx] = { ...site, groupId }
     } else {
       source.sites.splice(idx, 1)
-      target.sites.push({ ...site })
+      target.sites.push({ ...site, groupId })
     }
     toast.success('已保存')
   } else {
-    target.sites.push({ ...site, id: generateId('site') })
+    target.sites.push({ ...site, id: generateId('site'), groupId })
     toast.success(`已添加到「${target.name}」`)
   }
 
@@ -555,7 +712,15 @@ function handleSaveCategory(catData) {
     }
     toast.success('已保存')
   } else {
-    data.value.categories.push({ ...catData, id: generateId('cat'), sites: [] })
+    data.value.categories.push({
+      ...catData,
+      id: generateId('cat'),
+      groups: [
+        { id: generateId('group'), name: '常用' },
+        { id: generateId('group'), name: '非常用' }
+      ],
+      sites: []
+    })
     toast.success(`已创建「${catData.name}」`)
   }
   categoryModalVisible.value = false
@@ -587,16 +752,17 @@ function showMoveModal(site, fromCategoryId) {
   moveModalVisible.value = true
 }
 
-function handleMoveSite({ targetCategoryId }) {
+function handleMoveSite({ targetCategoryId, targetGroupId }) {
   const fromCat = data.value.categories.find(c => c.id === movingSiteFromCategoryId.value)
   const targetCat = data.value.categories.find(c => c.id === targetCategoryId)
   if (!fromCat || !targetCat) return
+  if (!targetCat.groups.some(group => group.id === targetGroupId)) return
 
   const idx = fromCat.sites.findIndex(s => s.id === movingSite.value.id)
   if (idx === -1) return
 
   const [site] = fromCat.sites.splice(idx, 1)
-  targetCat.sites.push(site)
+  targetCat.sites.push({ ...site, groupId: targetGroupId })
   moveModalVisible.value = false
   toast.success(`已移动到「${targetCat.name}」`)
 }
@@ -654,7 +820,9 @@ async function handleFileSelected(e) {
     }
 
     const skipped = describeDropped(dropped)
-    toast.success(`导入完成，共 ${count} 个网站${skipped ? `。${skipped}` : ''}`)
+    await nextTick()
+    const synced = await persistNow()
+    toast.success(`导入完成，共 ${count} 个网站${skipped ? `。${skipped}` : ''}${synced ? '，已同步到云端。' : ''}`)
   } catch (err) {
     toast.error(err.message)
   }
@@ -665,7 +833,8 @@ async function handleFileSelected(e) {
 <style scoped>
 .app-container {
   display: flex;
-  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg-primary);
 }
 
 .main-area {
@@ -678,12 +847,13 @@ async function handleFileSelected(e) {
 
 .app-header {
   min-height: var(--header-height);
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 24px;
+  padding: 12px clamp(16px, 3vw, 40px);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -707,20 +877,22 @@ async function handleFileSelected(e) {
 
 .search-bar {
   flex: 1;
-  max-width: 500px;
+  max-width: 560px;
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 0 16px;
-  height: 40px;
-  transition: border-color 0.2s;
+  border-radius: var(--radius);
+  padding: 0 14px;
+  height: 44px;
+  box-shadow: 0 1px 0 rgba(19, 78, 74, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .search-bar:focus-within {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .search-icon {
@@ -765,11 +937,40 @@ async function handleFileSelected(e) {
 
 .content {
   flex: 1;
-  padding: 24px;
+  width: min(1440px, 100%);
+  padding: clamp(24px, 4vw, 44px) clamp(16px, 3vw, 40px) 56px;
+}
+
+.collection-summary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 32px;
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.collection-summary h1 {
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.collection-meta {
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .category-section {
-  margin-bottom: 32px;
+  margin-bottom: 40px;
 }
 
 .category-header {
@@ -780,8 +981,14 @@ async function handleFileSelected(e) {
   margin-bottom: 16px;
 }
 
+.category-header-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
 .category-title {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -816,8 +1023,94 @@ async function handleFileSelected(e) {
 
 .site-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.group-list {
+  display: grid;
+  gap: 24px;
+}
+
+.group-section {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: -12px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.group-section.is-drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-light) 45%, transparent);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  margin-bottom: 10px;
+}
+
+.group-header h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.group-header h3 span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.group-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.group-section:hover .group-actions,
+.group-actions:focus-within {
+  opacity: 1;
+}
+
+.group-action {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.group-action:hover,
+.group-action:focus-visible {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.group-empty {
+  margin: 2px 0 0;
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
 }
 
 .load-more {
@@ -849,8 +1142,19 @@ async function handleFileSelected(e) {
     padding: 16px;
   }
 
+  .collection-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
   .site-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  .group-actions {
+    opacity: 1;
   }
 }
 </style>

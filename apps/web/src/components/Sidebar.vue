@@ -4,7 +4,7 @@
 
   <aside class="sidebar" :class="{ open }" :aria-hidden="isMobileClosed ? 'true' : undefined">
     <div class="sidebar-header">
-      <span class="logo" aria-hidden="true">🧭</span>
+      <span class="logo" aria-hidden="true">N</span>
       <span class="title">我的导航</span>
       <button
         class="drawer-close"
@@ -21,7 +21,7 @@
         :class="{ active: !activeCategoryId && !searchKeyword }"
         @click="$emit('show-all')"
       >
-        <span class="nav-icon" aria-hidden="true">🏠</span>
+        <span class="nav-icon" aria-hidden="true">⌂</span>
         <span class="nav-text">全部</span>
         <span class="nav-count">{{ totalSites }}</span>
       </button>
@@ -47,19 +47,19 @@
             :aria-label="`编辑分类 ${cat.name}`"
             title="编辑"
             @click="$emit('edit-category', cat)"
-          >✏️</button>
+          >✎</button>
           <button
             class="nav-action-btn"
             type="button"
             :aria-label="`删除分类 ${cat.name}`"
             title="删除"
             @click="$emit('delete-category', cat.id)"
-          >🗑️</button>
+          >⌫</button>
         </div>
       </div>
 
       <button class="nav-item add-btn" type="button" @click="$emit('add-category')">
-        <span class="nav-icon" aria-hidden="true">➕</span>
+        <span class="nav-icon" aria-hidden="true">＋</span>
         <span class="nav-text">添加分类</span>
       </button>
     </nav>
@@ -95,7 +95,7 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
   bottom: 0;
   width: var(--sidebar-width);
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   display: flex;
   flex-direction: column;
   z-index: 200;
@@ -111,13 +111,20 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 0 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   flex-shrink: 0;
 }
 
 .logo {
-  font-size: 24px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 18px;
 }
 
 .title {
@@ -138,7 +145,7 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
 }
 
 .sidebar-nav {
-  padding: 12px 8px;
+  padding: 18px 12px;
   flex: 1;
 }
 
@@ -152,6 +159,7 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
   align-items: center;
   gap: 10px;
   width: 100%;
+  min-height: 44px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -173,6 +181,10 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
   font-weight: 600;
 }
 
+.nav-row.active {
+  background: color-mix(in srgb, var(--accent-light) 70%, transparent);
+}
+
 .nav-icon {
   font-size: 16px;
   flex-shrink: 0;
@@ -191,7 +203,9 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
   color: var(--text-muted);
   background: var(--bg-tertiary);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 999px;
+  min-width: 24px;
+  text-align: center;
 }
 
 .nav-row.active .nav-count,
@@ -231,7 +245,9 @@ const isMobileClosed = computed(() => props.isMobile && !props.open)
 .nav-action-btn {
   background: none;
   border: none;
-  padding: 2px 4px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
   font-size: 12px;
   border-radius: 4px;
   opacity: 0.7;

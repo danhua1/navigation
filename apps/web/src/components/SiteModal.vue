@@ -73,6 +73,14 @@
         </select>
         <p v-if="errors.categoryId" class="form-error">{{ errors.categoryId }}</p>
       </div>
+
+      <div class="form-group">
+        <label class="form-label" :for="`${uid}-group`">所属分组 *</label>
+        <select :id="`${uid}-group`" v-model="form.groupId" class="form-select" :class="{ 'has-error': errors.groupId }">
+          <option v-for="group in selectedGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+        </select>
+        <p v-if="errors.groupId" class="form-error">{{ errors.groupId }}</p>
+      </div>
     </form>
 
     <template #footer>
@@ -90,7 +98,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import { normalizeUrl } from '../utils/url.js'
 
@@ -98,7 +106,8 @@ const props = defineProps({
   site: { type: Object, default: null },
   categories: { type: Array, required: true },
   // 新增时是目标分类；编辑时是该站点当前所属分类
-  defaultCategoryId: { type: String, default: null }
+  defaultCategoryId: { type: String, default: null },
+  defaultGroupId: { type: String, default: null }
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -110,8 +119,25 @@ const form = ref(emptyForm())
 const errors = ref({})
 
 function emptyForm() {
-  return { id: null, name: '', url: '', description: '', icon: '', categoryId: '' }
+  return { id: null, name: '', url: '', description: '', icon: '', categoryId: '', groupId: '' }
 }
+
+const selectedGroups = computed(() =>
+  props.categories.find(category => category.id === form.value.categoryId)?.groups || []
+)
+
+function fallbackGroupId(categoryId = form.value.categoryId) {
+  const groups = props.categories.find(category => category.id === categoryId)?.groups || []
+  const wanted = props.defaultGroupId
+  if (wanted && groups.some(group => group.id === wanted)) return wanted
+  return groups[0]?.id || ''
+}
+
+watch(() => form.value.categoryId, categoryId => {
+  if (!selectedGroups.value.some(group => group.id === form.value.groupId)) {
+    form.value.groupId = fallbackGroupId(categoryId)
+  }
+})
 
 function fallbackCategoryId() {
   const wanted = props.defaultCategoryId
@@ -131,10 +157,12 @@ watch(
         description: newSite.description || '',
         icon: newSite.icon || '',
         // 分类归属由外部传入，不再依赖站点对象上的历史字段
-        categoryId: fallbackCategoryId()
+        categoryId: fallbackCategoryId(),
+        groupId: newSite.groupId || fallbackGroupId(fallbackCategoryId())
       }
     } else {
-      form.value = { ...emptyForm(), categoryId: fallbackCategoryId() }
+      const categoryId = fallbackCategoryId()
+      form.value = { ...emptyForm(), categoryId, groupId: fallbackGroupId(categoryId) }
     }
   },
   { immediate: true }
@@ -157,6 +185,10 @@ function handleSave() {
   if (!categoryId || !props.categories.some(c => c.id === categoryId)) {
     next.categoryId = '请选择分类'
   }
+  const groupId = form.value.groupId
+  if (!groupId || !selectedGroups.value.some(group => group.id === groupId)) {
+    next.groupId = '请选择分组'
+  }
 
   errors.value = next
   if (Object.keys(next).length > 0) return
@@ -170,7 +202,8 @@ function handleSave() {
       description: form.value.description.trim(),
       icon: form.value.icon.trim()
     },
-    categoryId
+    categoryId,
+    groupId
   })
 }
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <BaseModal title="移动到其他分类" @close="emit('close')">
+  <BaseModal title="移动网站" @close="emit('close')">
     <div class="site-preview">
       <span class="site-preview-icon">{{ site.icon || site.name.charAt(0).toUpperCase() }}</span>
       <div class="site-preview-text">
@@ -14,11 +14,8 @@
     </div>
 
     <div class="form-group">
-      <span class="form-label" :id="`${uid}-label`">移动到 *</span>
-      <p v-if="targets.length === 0" class="form-error">
-        没有其他分类可供移动，请先创建一个新分类。
-      </p>
-      <div v-else class="category-list" role="listbox" :aria-labelledby="`${uid}-label`">
+      <span class="form-label" :id="`${uid}-label`">目标分类 *</span>
+      <div class="category-list" role="listbox" :aria-labelledby="`${uid}-label`">
         <button
           v-for="cat in targets"
           :key="cat.id"
@@ -27,12 +24,31 @@
           :class="{ active: selectedCategoryId === cat.id }"
           role="option"
           :aria-selected="selectedCategoryId === cat.id"
-          @click="selectedCategoryId = cat.id"
-          @dblclick="handleMove"
+          @click="selectCategory(cat.id)"
         >
           <span class="category-option-icon">{{ cat.icon }}</span>
           <span class="category-option-name">{{ cat.name }}</span>
           <span class="category-option-count">{{ cat.sites.length }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <span class="form-label" :id="`${uid}-group-label`">目标分组 *</span>
+      <div class="group-list" role="listbox" :aria-labelledby="`${uid}-group-label`">
+        <button
+          v-for="group in selectedGroups"
+          :key="group.id"
+          type="button"
+          class="category-option"
+          :class="{ active: selectedGroupId === group.id }"
+          role="option"
+          :aria-selected="selectedGroupId === group.id"
+          @click="selectedGroupId = group.id"
+          @dblclick="handleMove"
+        >
+          <span class="category-option-name">{{ group.name }}</span>
+          <span class="category-option-count">{{ groupSiteCount(group.id) }}</span>
         </button>
       </div>
     </div>
@@ -60,9 +76,10 @@ const emit = defineEmits(['close', 'move'])
 
 const uid = `move-${Math.random().toString(36).slice(2, 8)}`
 const selectedCategoryId = ref('')
+const selectedGroupId = ref('')
 
-// 源分类不作为候选项出现，避免出现一整排禁用按钮
-const targets = computed(() => props.categories.filter(c => c.id !== props.fromCategoryId))
+const targets = computed(() => props.categories)
+const selectedGroups = computed(() => props.categories.find(category => category.id === selectedCategoryId.value)?.groups || [])
 
 const fromCategoryName = computed(() => {
   const cat = props.categories.find(c => c.id === props.fromCategoryId)
@@ -70,12 +87,21 @@ const fromCategoryName = computed(() => {
 })
 
 const canMove = computed(
-  () => Boolean(selectedCategoryId.value) && selectedCategoryId.value !== props.fromCategoryId
+  () => Boolean(selectedCategoryId.value) && Boolean(selectedGroupId.value)
 )
+
+function selectCategory(categoryId) {
+  selectedCategoryId.value = categoryId
+  selectedGroupId.value = selectedGroups.value[0]?.id || ''
+}
+
+function groupSiteCount(groupId) {
+  return props.categories.find(category => category.id === selectedCategoryId.value)?.sites.filter(site => site.groupId === groupId).length || 0
+}
 
 function handleMove() {
   if (!canMove.value) return
-  emit('move', { targetCategoryId: selectedCategoryId.value })
+  emit('move', { targetCategoryId: selectedCategoryId.value, targetGroupId: selectedGroupId.value })
 }
 </script>
 

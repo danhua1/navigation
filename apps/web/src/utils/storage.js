@@ -73,7 +73,7 @@ export function getDefaultData() {
   const data = structuredClone(defaultData)
   // 首次使用时跟随系统偏好，和 index.html 的首屏脚本保持一致
   data.settings.theme = preferredTheme()
-  return data
+  return sanitizeData(data).data
 }
 
 // 生成唯一 ID
@@ -107,7 +107,7 @@ function cleanSiteIcon(value, state) {
 }
 
 // 站点必须有合法 http(s) 地址，名称缺失时用主机名兜底
-function sanitizeSite(raw, seenIds, iconState) {
+function sanitizeSite(raw, seenIds, iconState, groupIds, fallbackGroupId) {
   if (!raw || typeof raw !== 'object') return null
 
   const url = normalizeUrl(raw.url)
@@ -124,25 +124,53 @@ function sanitizeSite(raw, seenIds, iconState) {
     name,
     url,
     description: cleanText(raw.description, 300),
-    icon: cleanSiteIcon(raw.icon, iconState)
+    icon: cleanSiteIcon(raw.icon, iconState),
+    groupId: groupIds.has(cleanText(raw.groupId, 64)) ? cleanText(raw.groupId, 64) : fallbackGroupId
   }
 }
 
-function sanitizeCategory(raw, seenIds, seenSiteIds, iconState) {
+function defaultGroups(seenGroupIds) {
+  const make = name => {
+    let id = generateId('group')
+    while (seenGroupIds.has(id)) id = generateId('group')
+    seenGroupIds.add(id)
+    return { id, name }
+  }
+  return [make('常用'), make('非常用')]
+}
+
+function sanitizeGroups(rawGroups, seenGroupIds) {
+  if (!Array.isArray(rawGroups) || rawGroups.length === 0) return defaultGroups(seenGroupIds)
+
+  const groups = []
+  for (const raw of rawGroups.slice(0, 100)) {
+    if (!raw || typeof raw !== 'object') continue
+    let id = cleanText(raw.id, 64)
+    if (!id || seenGroupIds.has(id)) id = generateId('group')
+    seenGroupIds.add(id)
+    groups.push({ id, name: cleanText(raw.name, 48) || '未命名分组' })
+  }
+  return groups.length > 0 ? groups : defaultGroups(seenGroupIds)
+}
+
+function sanitizeCategory(raw, seenIds, seenSiteIds, seenGroupIds, iconState) {
   if (!raw || typeof raw !== 'object') return null
 
   let id = cleanText(raw.id, 64)
   if (!id || seenIds.has(id)) id = generateId('cat')
   seenIds.add(id)
 
+  const groups = sanitizeGroups(raw.groups, seenGroupIds)
+  const groupIds = new Set(groups.map(group => group.id))
   const sites = Array.isArray(raw.sites)
-    ? raw.sites.map(s => sanitizeSite(s, seenSiteIds, iconState)).filter(Boolean)
+    ? raw.sites.map(s => sanitizeSite(s, seenSiteIds, iconState, groupIds, groups[0].id)).filter(Boolean)
     : []
 
   return {
     id,
     name: cleanText(raw.name, 60) || '未命名分类',
     icon: cleanIcon(raw.icon) || '📁',
+    groups,
     sites
   }
 }
@@ -165,13 +193,14 @@ export function sanitizeData(raw) {
 
   const seenCatIds = new Set()
   const seenSiteIds = new Set()
+  const seenGroupIds = new Set()
   const iconState = { embeddedIconChars: 0 }
   const categories = []
   let droppedSites = 0
 
   for (const rawCat of rawCategories) {
     const rawSiteCount = Array.isArray(rawCat?.sites) ? rawCat.sites.length : 0
-    const cat = sanitizeCategory(rawCat, seenCatIds, seenSiteIds, iconState)
+    const cat = sanitizeCategory(rawCat, seenCatIds, seenSiteIds, seenGroupIds, iconState)
     if (!cat) continue
     droppedSites += rawSiteCount - cat.sites.length
     categories.push(cat)
@@ -313,6 +342,7 @@ export function reindexForAppend(categories, existing = []) {
   const taken = new Set()
   for (const cat of existing) {
     taken.add(cat.id)
+    for (const group of cat.groups || []) taken.add(group.id)
     for (const site of cat.sites) taken.add(site.id)
   }
 
@@ -324,9 +354,13 @@ export function reindexForAppend(categories, existing = []) {
     return id
   }
 
-  return categories.map(cat => ({
-    ...cat,
-    id: fresh('cat'),
-    sites: cat.sites.map(site => ({ ...site, id: fresh('site') }))
-  }))
+  return categories.map(cat => {
+    const groupIdMap = new Map((cat.groups || []).map(group => [group.id, fresh('group')]))
+    return {
+      ...cat,
+      id: fresh('cat'),
+      groups: (cat.groups || []).map(group => ({ ...group, id: groupIdMap.get(group.id) })),
+      sites: cat.sites.map(site => ({ ...site, id: fresh('site'), groupId: groupIdMap.get(site.groupId) || site.groupId }))
+    }
+  })
 }
