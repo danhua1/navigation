@@ -1,11 +1,11 @@
 <template>
   <div class="site-card">
     <div class="site-icon" :style="{ background: iconBg }" aria-hidden="true">
-      <!-- 未自定义图标时试读站点 favicon，失败则回退到首字母 -->
+      <!-- 优先使用用户提供的安全内嵌图标；否则试读站点自身 favicon。 -->
       <img
-        v-if="faviconUrl && !faviconFailed"
+        v-if="displayIconUrl && !faviconFailed"
         class="site-favicon"
-        :src="faviconUrl"
+        :src="displayIconUrl"
         alt=""
         loading="lazy"
         decoding="async"
@@ -61,9 +61,11 @@ const props = defineProps({
 
 defineEmits(['edit', 'delete', 'move'])
 
-const iconText = computed(
-  () => props.site.icon || props.site.name.charAt(0).toUpperCase() || '🔗'
-)
+const isEmbeddedImage = computed(() => /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(props.site.icon || ''))
+const iconText = computed(() => {
+  if (isEmbeddedImage.value) return props.site.name.charAt(0).toUpperCase() || '🔗'
+  return props.site.icon || props.site.name.charAt(0).toUpperCase() || '🔗'
+})
 
 const faviconFailed = ref(false)
 
@@ -78,8 +80,10 @@ const faviconUrl = computed(() => {
   }
 })
 
+const displayIconUrl = computed(() => isEmbeddedImage.value ? props.site.icon : faviconUrl.value)
+
 // 换站点时重置失败标记，否则复用的组件实例会一直显示首字母
-watch(faviconUrl, () => {
+watch(displayIconUrl, () => {
   faviconFailed.value = false
 })
 

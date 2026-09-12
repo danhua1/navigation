@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD COLUMN `navigation_revision` INTEGER NOT NULL DEFAULT 0;

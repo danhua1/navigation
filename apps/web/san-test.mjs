@@ -4,7 +4,7 @@ global.DOMParser = dom.window.DOMParser
 global.localStorage = dom.window.localStorage
 global.matchMedia = () => ({ matches: false })
 
-const { sanitizeData, reindexForAppend } = await import('./src/utils/storage.js')
+const { MAX_IMPORT_BYTES, importData, sanitizeData, reindexForAppend } = await import('./src/utils/storage.js')
 
 let pass = 0, fail = 0
 const ok = (c, m) => { c ? pass++ : fail++; console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`) }
@@ -37,7 +37,8 @@ const sites = cats[0].sites
 ok(sites.length === 3, `A 保留 3 个站点（得到 ${sites.length}）`)
 ok(!sites.some(s => s.url.startsWith('javascript:')), 'javascript: 站点已剔除')
 ok(new Set(sites.map(s => s.id)).size === sites.length, '重复站点 id 已重新分配')
-ok(sites.every(s => !String(s.icon).startsWith('data:')), 'base64 图标未落库')
+ok(sites.find(s => s.name === 'B64')?.icon === 'data:image/png;base64,AAAA', '安全的 base64 位图图标被保留')
+ok(sanitizeData({ categories: [{ sites: [{ name: 'Unsafe', url: 'https://unsafe.com', icon: 'data:image/svg+xml;base64,AAAA' }] }] }).data.categories[0].sites[0].icon === '', 'SVG data URI 图标被拒绝')
 ok(new Set(cats.map(c => c.id)).size === 3, '重复分类 id 已重新分配')
 ok(Array.isArray(cats.find(c => c.name === 'NoSites')?.sites), 'sites 缺失时补成数组')
 ok(r.data.settings.theme === 'light' || r.data.settings.theme === 'dark', `非法主题被纠正（${r.data.settings.theme}）`)
@@ -73,6 +74,12 @@ const big = sanitizeData({ categories: Array.from({ length: 40 }, (_, i) => ({
 const rebig = reindexForAppend(big, big)
 const bigIds = [...big, ...rebig].flatMap(c => [c.id, ...c.sites.map(s => s.id)])
 ok(new Set(bigIds).size === bigIds.length, `2000+ 条批量重排无 id 冲突（${bigIds.length} 个）`)
+
+// 导入限制必须在 FileReader 读取前生效，避免大文件阻塞浏览器。
+await importData({ size: MAX_IMPORT_BYTES + 1 }).then(
+  () => ok(false, '超大导入文件被拒绝'),
+  error => ok(error.message.includes('最多支持 5MB'), '超大导入文件被拒绝')
+)
 
 console.log(fail === 0 ? `\nall ${pass} passed` : `\n${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)

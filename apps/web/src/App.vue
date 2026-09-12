@@ -1,5 +1,6 @@
 <template>
-  <div class="app-container">
+  <AuthView v-if="!authReady || !authUser" :loading="!authReady" @authenticated="handleAuthenticated" />
+  <div v-else class="app-container">
     <button
       class="drawer-toggle"
       type="button"
@@ -57,14 +58,14 @@
           <button class="btn btn-ghost" type="button" title="导入 JSON 备份" @click="triggerImport">
             <span aria-hidden="true">📥</span><span class="btn-label">导入</span>
           </button>
-          <button class="btn btn-ghost" type="button" title="导入浏览器书签" @click="triggerBookmarkImport">
-            <span aria-hidden="true">🔖</span><span class="btn-label">书签导入</span>
-          </button>
           <button class="btn btn-ghost" type="button" title="导出 JSON 备份" @click="handleExport">
             <span aria-hidden="true">📤</span><span class="btn-label">导出</span>
           </button>
           <button class="btn btn-primary" type="button" @click="showSiteModal()">
             <span aria-hidden="true">+</span><span class="btn-label">添加网站</span>
+          </button>
+          <button class="btn btn-ghost" type="button" title="退出登录" @click="handleLogout">
+            <span class="btn-label">{{ authUser.username }}</span><span aria-hidden="true">↪</span>
           </button>
           <input
             ref="fileInput"
@@ -73,14 +74,6 @@
             class="sr-only"
             tabindex="-1"
             @change="handleFileSelected"
-          />
-          <input
-            ref="bookmarkInput"
-            type="file"
-            accept="text/html,.html,.htm"
-            class="sr-only"
-            tabindex="-1"
-            @change="handleBookmarkFileSelected"
           />
         </div>
       </header>
@@ -175,7 +168,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import SiteCard from './components/SiteCard.vue'
 import SiteModal from './components/SiteModal.vue'
@@ -183,17 +176,21 @@ import CategoryModal from './components/CategoryModal.vue'
 import MoveModal from './components/MoveModal.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ToastHost from './components/ToastHost.vue'
+import AuthView from './components/AuthView.vue'
+import { clearToken, currentUser, getNavigationData, saveNavigationData } from './api/auth.js'
 import { useToast } from './composables/useToast.js'
 import { useDialog } from './composables/useDialog.js'
 import { debounce } from './utils/debounce.js'
 import {
   exportData,
+  getDefaultData,
   generateId,
-  importBookmarkHtml,
   importData,
   loadData,
+  MAX_IMPORT_BYTES,
   reindexForAppend,
-  saveData
+  saveData,
+  sanitizeData
 } from './utils/storage.js'
 
 const PAGE_SIZE = 60
@@ -211,6 +208,8 @@ const activeKeyword = ref('')
 const theme = ref('light')
 const sidebarOpen = ref(false)
 const isMobile = ref(false)
+const authUser = ref(null)
+const authReady = ref(false)
 
 // 弹窗状态
 const siteModalVisible = ref(false)
@@ -222,22 +221,26 @@ const siteModalCategoryId = ref(null)
 const movingSite = ref(null)
 const movingSiteFromCategoryId = ref(null)
 const fileInput = ref(null)
-const bookmarkInput = ref(null)
 
 // 每个分类已展开的数量
 const expanded = ref({})
 
 // ===== 初始化 =====
 let mediaQuery = null
+let activeUserId = null
+let remoteRevision = 0
+let hydratingData = false
+let remoteSyncBlocked = false
 
 function syncIsMobile(e) {
   isMobile.value = e.matches
   if (!e.matches) sidebarOpen.value = false
 }
 
-onMounted(() => {
-  data.value = loadData()
-  applyTheme(data.value.settings.theme)
+onMounted(async () => {
+  const user = await currentUser()
+  authUser.value = user && await activateUser(user) ? user : null
+  authReady.value = true
 
   mediaQuery = window.matchMedia('(max-width: 768px)')
   syncIsMobile(mediaQuery)
@@ -247,6 +250,22 @@ onMounted(() => {
   window.addEventListener('pagehide', flushSave)
   document.addEventListener('visibilitychange', handleVisibility)
 })
+
+function handleAuthenticated(user) {
+  activateUser(user).then(active => {
+    if (active) authUser.value = user
+  })
+}
+
+function handleLogout() {
+  debouncedPersist.cancel()
+  activeUserId = null
+  remoteRevision = 0
+  remoteSyncBlocked = false
+  clearToken()
+  authUser.value = null
+  data.value = getDefaultData()
+}
 
 onBeforeUnmount(() => {
   mediaQuery?.removeEventListener('change', syncIsMobile)
@@ -261,21 +280,51 @@ function handleVisibility() {
 
 // ===== 持久化 =====
 let lastSaveError = ''
+let remoteSaveChain = Promise.resolve()
 
-function persist(snapshot) {
-  const result = saveData(snapshot)
+async function persist(snapshot, userId) {
+  const result = saveData(snapshot, userId)
   if (result.ok) {
     lastSaveError = ''
-    return
-  }
-  // 同一个错误只提示一次，避免连续输入时刷屏
-  if (result.error !== lastSaveError) {
+  } else if (result.error !== lastSaveError) {
     lastSaveError = result.error
     toast.error(result.error)
   }
+
+  if (!userId) return
+
+  // 所有远端写入排队，避免网络乱序导致旧快照覆盖新快照。
+  remoteSaveChain = remoteSaveChain
+    .catch(() => {})
+    .then(async () => {
+      if (activeUserId !== userId || remoteSyncBlocked) return
+      try {
+        const result = await saveNavigationData(snapshot, remoteRevision)
+        remoteRevision = result.revision
+        lastRemoteSaveError = ''
+      } catch (error) {
+        if (error.status === 401) {
+          clearToken()
+          activeUserId = null
+          authUser.value = null
+          return
+        }
+        if (error.status === 409) {
+          remoteSyncBlocked = true
+          toast.error('云端数据已在其他位置更新。本地修改已保留，请刷新后再同步。')
+          return
+        }
+        if (error.message !== lastRemoteSaveError) {
+          lastRemoteSaveError = error.message
+          toast.error(`云端保存失败：${error.message}`)
+        }
+      }
+    })
+  await remoteSaveChain
 }
 
 const debouncedPersist = debounce(persist, SAVE_DELAY)
+let lastRemoteSaveError = ''
 
 function flushSave() {
   debouncedPersist.flush()
@@ -284,11 +333,53 @@ function flushSave() {
 watch(
   data,
   newVal => {
-    // 传响应式对象本身：序列化在防抖结束时才发生，届时写入的是最新状态
-    debouncedPersist(newVal)
+    if (activeUserId && !hydratingData) {
+      // 防止排队期间继续修改响应式对象，导致请求内容随引用变化。
+      debouncedPersist(structuredClone(toRaw(newVal)), activeUserId)
+    }
   },
   { deep: true }
 )
+
+async function activateUser(user) {
+  activeUserId = user.id
+  remoteSyncBlocked = false
+  const localData = loadData(user.id)
+
+  try {
+    const remote = await getNavigationData()
+    remoteRevision = remote.revision
+    if (remote.data) {
+      hydratingData = true
+      data.value = sanitizeData(remote.data).data
+      await nextTick()
+      hydratingData = false
+      saveData(data.value, user.id)
+    } else {
+      hydratingData = true
+      data.value = localData
+      await nextTick()
+      hydratingData = false
+      const result = await saveNavigationData(data.value, remoteRevision)
+      remoteRevision = result.revision
+      saveData(data.value, user.id)
+    }
+    applyTheme(data.value.settings.theme)
+  } catch (error) {
+    if (error.status === 401) {
+      clearToken()
+      activeUserId = null
+      return false
+    }
+    hydratingData = true
+    data.value = localData
+    await nextTick()
+    hydratingData = false
+    applyTheme(data.value.settings.theme)
+    toast.error(`云端数据加载失败，当前使用本地缓存：${error.message}`)
+  }
+  return true
+}
 
 const debouncedSearch = debounce(value => {
   activeKeyword.value = value
@@ -532,6 +623,10 @@ async function handleFileSelected(e) {
   const file = e.target.files[0]
   e.target.value = ''
   if (!file) return
+  if (file.size > MAX_IMPORT_BYTES) {
+    toast.error('导入文件过大，最多支持 5MB')
+    return
+  }
 
   try {
     const { data: imported, dropped } = await importData(file)
@@ -565,48 +660,6 @@ async function handleFileSelected(e) {
   }
 }
 
-function triggerBookmarkImport() {
-  bookmarkInput.value.click()
-}
-
-async function handleBookmarkFileSelected(e) {
-  const file = e.target.files[0]
-  e.target.value = ''
-  if (!file) return
-
-  try {
-    const { categories, total, skipped } = await importBookmarkHtml(file)
-    const count = categories.reduce((sum, c) => sum + c.sites.length, 0)
-
-    const lines = [`解析到 ${categories.length} 个分类、${count} 个网站。`]
-    if (skipped > 0) {
-      lines.push(`已跳过 ${skipped} 个重复或不支持的链接（共 ${total} 条）。`)
-    }
-    lines.push('导入方式：')
-
-    const choice = await ask({
-      title: '导入浏览器书签',
-      message: lines.join('\n'),
-      choices: [
-        { label: '取消', value: null, variant: 'ghost' },
-        { label: '追加', value: 'append' },
-        { label: '覆盖', value: 'replace', variant: 'danger' }
-      ]
-    })
-    if (!choice) return
-
-    if (choice === 'replace') {
-      data.value.categories = categories
-      activeCategoryId.value = null
-      expanded.value = {}
-    } else {
-      data.value.categories.push(...reindexForAppend(categories, data.value.categories))
-    }
-    toast.success(`已导入 ${count} 个网站`)
-  } catch (err) {
-    toast.error(err.message)
-  }
-}
 </script>
 
 <style scoped>
