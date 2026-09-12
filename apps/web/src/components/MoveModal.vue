@@ -1,6 +1,10 @@
 <template>
-  <BaseModal title="移动网站" @close="emit('close')">
-    <div class="site-preview">
+  <BaseModal :title="isBulkMove ? '批量移动网站' : '移动网站'" @close="emit('close')">
+    <div v-if="isBulkMove" class="bulk-preview">
+      <strong>{{ sites.length }}</strong>
+      <span>个已选择的网站</span>
+    </div>
+    <div v-else-if="site" class="site-preview">
       <span class="site-preview-icon">{{ site.icon || site.name.charAt(0).toUpperCase() }}</span>
       <div class="site-preview-text">
         <div class="site-preview-name">{{ site.name }}</div>
@@ -8,7 +12,7 @@
       </div>
     </div>
 
-    <div class="form-group">
+    <div v-if="!isBulkMove" class="form-group">
       <span class="form-label">当前分类</span>
       <div class="current-category">{{ fromCategoryName }}</div>
     </div>
@@ -67,8 +71,9 @@ import { computed, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 
 const props = defineProps({
-  site: { type: Object, required: true },
-  fromCategoryId: { type: String, required: true },
+  site: { type: Object, default: null },
+  sites: { type: Array, default: () => [] },
+  fromCategoryId: { type: String, default: null },
   categories: { type: Array, required: true }
 })
 
@@ -80,6 +85,7 @@ const selectedGroupId = ref('')
 
 const targets = computed(() => props.categories)
 const selectedGroups = computed(() => props.categories.find(category => category.id === selectedCategoryId.value)?.groups || [])
+const isBulkMove = computed(() => props.sites.length > 0)
 
 const fromCategoryName = computed(() => {
   const cat = props.categories.find(c => c.id === props.fromCategoryId)
@@ -114,6 +120,24 @@ function handleMove() {
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
   margin-bottom: 16px;
+}
+
+.bulk-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  background: var(--accent-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+.bulk-preview strong {
+  color: var(--accent);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 24px;
 }
 
 .site-preview-icon {

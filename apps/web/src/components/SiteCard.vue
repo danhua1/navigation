@@ -1,5 +1,17 @@
 <template>
-  <div class="site-card" draggable="true" @dragstart="startDrag" @dragend="dragging = false" :class="{ dragging }">
+  <div class="site-card" draggable="true" @dragstart="startDrag" @dragend="dragging = false" :class="{ dragging, selected }">
+    <label
+      class="selection-toggle"
+      @click.stop
+    >
+      <input
+        type="checkbox"
+        :checked="selected"
+        :aria-label="selected ? `取消选择 ${site.name}` : `选择 ${site.name}`"
+        @change="$emit('toggle-selection', site.id)"
+      />
+      <span class="selection-check" aria-hidden="true"></span>
+    </label>
     <div class="site-icon" :style="{ background: iconBg }" aria-hidden="true">
       <!-- 优先使用用户提供的安全内嵌图标；否则试读站点自身 favicon。 -->
       <img
@@ -32,21 +44,21 @@
         :aria-label="`移动 ${site.name} 到其他分类`"
         title="移动到其他分类"
         @click="$emit('move', site)"
-      >↗</button>
+      >移动</button>
       <button
         class="card-action-btn"
         type="button"
         :aria-label="`编辑 ${site.name}`"
         title="编辑"
         @click="$emit('edit', site)"
-      >✎</button>
+      >编辑</button>
       <button
         class="card-action-btn"
         type="button"
         :aria-label="`删除 ${site.name}`"
         title="删除"
         @click="$emit('delete', site.id)"
-      >⌫</button>
+      >删除</button>
     </div>
   </div>
 </template>
@@ -56,10 +68,11 @@ import { computed, ref, watch } from 'vue'
 import { urlHostname } from '../utils/url.js'
 
 const props = defineProps({
-  site: { type: Object, required: true }
+  site: { type: Object, required: true },
+  selected: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['edit', 'delete', 'move', 'dragstart'])
+const emit = defineEmits(['edit', 'delete', 'move', 'dragstart', 'toggle-selection'])
 const dragging = ref(false)
 
 function startDrag(event) {
@@ -117,34 +130,102 @@ const iconBg = computed(() => {
 .site-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 11px;
+  padding: 11px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  border-radius: 5px;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
   position: relative;
 }
 
 .site-card:hover,
 .site-card:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border));
+  background: color-mix(in srgb, var(--accent-light) 32%, var(--bg-secondary));
+  transform: translateX(2px);
 }
 
 .site-card.dragging {
   opacity: 0.45;
 }
 
+.site-card.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-light) 48%, var(--bg-secondary));
+}
+
+.site-card.selected .selection-toggle {
+  opacity: 1;
+  visibility: visible;
+}
+
+.selection-toggle {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--text-primary) 18%, transparent);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.selection-toggle input {
+  position: absolute;
+  opacity: 0;
+}
+
+.selection-check {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.selection-check::after {
+  content: '';
+  width: 7px;
+  height: 4px;
+  border-bottom: 2px solid var(--on-accent, #fff);
+  border-left: 2px solid var(--on-accent, #fff);
+  opacity: 0;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.selection-toggle input:checked + .selection-check {
+  border-color: var(--accent);
+  background: var(--accent);
+  opacity: 1;
+  visibility: visible;
+}
+
+.selection-toggle input:checked + .selection-check::after { opacity: 1; }
+
+.selection-toggle input:focus-visible + .selection-check {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .site-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 17px;
   color: #fff;
   font-weight: 600;
   flex-shrink: 0;
@@ -152,8 +233,8 @@ const iconBg = computed(() => {
 }
 
 .site-favicon {
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
   /* 图标底色可能与站点 favicon 撞色，留白衬底更清晰 */
   border-radius: 4px;
   background: #fff;
@@ -167,8 +248,8 @@ const iconBg = computed(() => {
 
 .site-name {
   display: block;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -189,24 +270,25 @@ const iconBg = computed(() => {
 }
 
 .site-desc {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .card-actions {
   display: flex;
   gap: 2px;
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 7px;
+  right: 7px;
   background: var(--bg-secondary);
   padding: 2px;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 8px rgba(19, 78, 74, 0.1);
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   /* 浮在铺满卡片的链接之上 */
   z-index: 1;
   opacity: 0;
@@ -221,9 +303,20 @@ const iconBg = computed(() => {
   visibility: visible;
 }
 
+.site-card:hover .selection-toggle,
+.selection-toggle:focus-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* 触屏没有 hover，直接常显 */
 @media (hover: none) {
   .card-actions {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .selection-toggle {
     opacity: 1;
     visibility: visible;
   }
@@ -232,12 +325,12 @@ const iconBg = computed(() => {
 .card-action-btn {
   background: none;
   border: none;
-  min-width: 30px;
-  min-height: 30px;
-  padding: 5px;
-  font-size: 12px;
-  border-radius: 4px;
-  opacity: 0.6;
+  min-width: 38px;
+  min-height: 32px;
+  padding: 5px 7px;
+  font-size: 11px;
+  border-radius: 3px;
+  opacity: 0.75;
 }
 
 .card-action-btn:hover,

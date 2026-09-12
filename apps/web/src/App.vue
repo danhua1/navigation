@@ -1,35 +1,38 @@
 <template>
   <AuthView v-if="!authReady || !authUser" :loading="!authReady" @authenticated="handleAuthenticated" />
-  <div v-else class="app-container">
-    <button
-      class="drawer-toggle"
-      type="button"
-      aria-label="打开分类菜单"
-      :aria-expanded="sidebarOpen"
-      @click="sidebarOpen = true"
-    >☰</button>
+  <div v-else class="app-shell">
+    <a class="skip-link" href="#workspace">跳到内容</a>
+    <header class="topbar">
+      <button class="wordmark" type="button" title="显示全部网站" @click="handleShowAll">
+        <span class="wordmark-mark" aria-hidden="true">N</span>
+        <span>Navigation</span>
+      </button>
+      <p class="sync-state"><span aria-hidden="true"></span>已连接 · {{ totalSiteCount }} 个链接</p>
+      <div class="topbar-actions">
+        <button class="btn btn-ghost utility-btn" type="button" title="导入 JSON 备份" @click="triggerImport">导入</button>
+        <button class="btn btn-ghost utility-btn" type="button" title="导出 JSON 备份" @click="handleExport">导出</button>
+        <button
+          class="theme-button"
+          type="button"
+          :aria-label="theme === 'light' ? '切换到暗色模式' : '切换到亮色模式'"
+          :title="theme === 'light' ? '暗色模式' : '亮色模式'"
+          @click="toggleTheme"
+        >{{ theme === 'light' ? '暗' : '亮' }}</button>
+        <button class="account-button" type="button" title="退出登录" @click="handleLogout">
+          <span class="account-avatar" aria-hidden="true">{{ authUser.username.charAt(0).toUpperCase() }}</span>
+          <span>{{ authUser.username }}</span>
+        </button>
+      </div>
+    </header>
 
-    <!-- 侧边栏 -->
-    <Sidebar
-      :categories="data.categories"
-      :active-category-id="activeCategoryId"
-      :search-keyword="searchKeyword"
-      :open="sidebarOpen"
-      :is-mobile="isMobile"
-      @select-category="handleSelectCategory"
-      @add-category="showCategoryModal()"
-      @edit-category="showCategoryModal($event)"
-      @delete-category="handleDeleteCategory"
-      @show-all="handleShowAll"
-      @close="sidebarOpen = false"
-    />
-
-    <!-- 主内容区 -->
-    <div class="main-area">
-      <!-- 顶部搜索栏 -->
-      <header class="app-header">
+    <main id="workspace" class="workspace" tabindex="-1">
+      <section class="command-deck" aria-label="导航控制台">
+        <div class="command-title">
+          <p class="kicker">PERSONAL LINK INDEX</p>
+          <h1>你的导航工作台</h1>
+        </div>
         <div class="search-bar">
-          <span class="search-icon" aria-hidden="true">⌕</span>
+          <span class="search-icon" aria-hidden="true">/</span>
           <input
             v-model="searchKeyword"
             class="search-input"
@@ -45,47 +48,40 @@
             @click="clearSearch"
           >×</button>
         </div>
-        <div class="header-actions">
-          <button
-            class="btn btn-ghost"
-            type="button"
-            :aria-label="theme === 'light' ? '切换到暗色模式' : '切换到亮色模式'"
-            :title="theme === 'light' ? '暗色模式' : '亮色模式'"
-            @click="toggleTheme"
-          >
-            {{ theme === 'light' ? '☾' : '☀' }}
-          </button>
-          <button class="btn btn-ghost" type="button" title="导入 JSON 备份" @click="triggerImport">
-            <span aria-hidden="true">↓</span><span class="btn-label">导入</span>
-          </button>
-          <button class="btn btn-ghost" type="button" title="导出 JSON 备份" @click="handleExport">
-            <span aria-hidden="true">↑</span><span class="btn-label">导出</span>
-          </button>
-          <button class="btn btn-primary" type="button" @click="showSiteModal()">
-            <span aria-hidden="true">＋</span><span class="btn-label">添加网站</span>
-          </button>
-          <button class="btn btn-ghost" type="button" title="退出登录" @click="handleLogout">
-            <span class="btn-label">{{ authUser.username }}</span><span aria-hidden="true">↪</span>
-          </button>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/json,.json"
-            class="sr-only"
-            tabindex="-1"
-            @change="handleFileSelected"
-          />
-        </div>
-      </header>
+        <button class="btn btn-primary add-site" type="button" @click="showSiteModal()">添加网站</button>
+      </section>
 
-      <!-- 站点列表 -->
-      <main class="content">
+      <nav class="category-rail" aria-label="分类工作区">
+        <button class="category-tab all-tab" :class="{ active: !activeCategoryId && !searchKeyword }" type="button" :aria-current="!activeCategoryId && !searchKeyword ? 'page' : undefined" @click="handleShowAll">
+          <span>全部</span><b>{{ totalSiteCount }}</b>
+        </button>
+        <div class="category-tab-wrap" v-for="cat in data.categories" :key="cat.id" :class="{ active: activeCategoryId === cat.id }">
+          <button class="category-tab" type="button" :aria-current="activeCategoryId === cat.id ? 'page' : undefined" @click="handleSelectCategory(cat.id)">
+            <span class="category-tab-icon" aria-hidden="true">{{ cat.icon }}</span>
+            <span>{{ cat.name }}</span><b>{{ cat.sites.length }}</b>
+          </button>
+          <div class="category-tab-actions">
+            <button type="button" :aria-label="`编辑分类 ${cat.name}`" title="编辑分类" @click="showCategoryModal(cat)">编辑</button>
+            <button type="button" :aria-label="`删除分类 ${cat.name}`" title="删除分类" @click="handleDeleteCategory(cat.id)">删除</button>
+          </div>
+        </div>
+        <button class="new-category" type="button" @click="showCategoryModal()">新建分类</button>
+      </nav>
+
+      <section class="content">
+        <div v-if="selectedSiteIds.size" class="selection-toolbar" role="status">
+          <span class="selection-count"><b>{{ selectedSiteIds.size }}</b> 已选择</span>
+          <div>
+            <button class="btn btn-ghost btn-sm" type="button" @click="clearSelection">取消选择</button>
+            <button class="btn btn-primary btn-sm" type="button" @click="showBulkMoveModal">移动到分组</button>
+          </div>
+        </div>
         <div v-if="!emptyState" class="collection-summary">
           <div>
-            <p class="eyebrow">收藏导航</p>
             <h1>{{ collectionTitle }}</h1>
+            <p class="collection-meta">{{ collectionMeta }}</p>
           </div>
-          <p class="collection-meta">{{ collectionMeta }}</p>
+          <p class="workspace-hint">拖动网站至分组，或使用网站菜单移动</p>
         </div>
         <div v-if="emptyState" class="empty-state">
           <div class="icon" aria-hidden="true">{{ emptyState.icon }}</div>
@@ -137,10 +133,13 @@
               @drop="dropSite(category.id, group.id)"
             >
               <div class="group-header">
-                <h3>{{ group.name }} <span>{{ sitesForGroup(category, group.id).length }}</span></h3>
+                <div>
+                  <p class="group-label">分组</p>
+                  <h3>{{ group.name }} <span>{{ sitesForGroup(category, group.id).length }}</span></h3>
+                </div>
                 <div class="group-actions">
-                  <button type="button" class="group-action" :aria-label="`编辑分组 ${group.name}`" title="编辑分组" @click="showGroupModal(category.id, group)">✎</button>
-                  <button type="button" class="group-action" :aria-label="`删除分组 ${group.name}`" title="删除分组" @click="handleDeleteGroup(category.id, group.id)">⌫</button>
+                  <button type="button" class="group-action" :aria-label="`编辑分组 ${group.name}`" title="编辑分组" @click="showGroupModal(category.id, group)">编辑</button>
+                  <button type="button" class="group-action" :aria-label="`删除分组 ${group.name}`" title="删除分组" @click="handleDeleteGroup(category.id, group.id)">删除</button>
                 </div>
               </div>
               <div class="site-grid">
@@ -152,6 +151,8 @@
                   @delete="handleDeleteSite(category.id, $event)"
                   @move="showMoveModal(site, category.id)"
                   @dragstart="draggedSiteId = $event.id"
+                  :selected="selectedSiteIds.has(site.id)"
+                  @toggle-selection="toggleSiteSelection"
                 />
               </div>
               <p v-if="sitesForGroup(category, group.id).length === 0" class="group-empty">将网站拖到这里，或通过“移动”操作归类。</p>
@@ -168,8 +169,16 @@
             显示更多（还有 {{ hiddenCount(category) }} 个）
           </button>
         </section>
-      </main>
-    </div>
+      </section>
+    </main>
+    <input
+      ref="fileInput"
+      type="file"
+      accept="application/json,.json"
+      class="sr-only"
+      tabindex="-1"
+      @change="handleFileSelected"
+    />
 
     <!-- 弹窗 -->
     <SiteModal
@@ -194,6 +203,7 @@
     <MoveModal
       v-if="moveModalVisible"
       :site="movingSite"
+      :sites="movingSites"
       :from-category-id="movingSiteFromCategoryId"
       :categories="data.categories"
       @close="moveModalVisible = false"
@@ -213,8 +223,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
-import Sidebar from './components/Sidebar.vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import SiteCard from './components/SiteCard.vue'
 import SiteModal from './components/SiteModal.vue'
 import CategoryModal from './components/CategoryModal.vue'
@@ -268,11 +277,13 @@ const siteModalCategoryId = ref(null)
 const siteModalGroupId = ref(null)
 const movingSite = ref(null)
 const movingSiteFromCategoryId = ref(null)
+const movingSiteIds = ref([])
 const editingGroup = ref(null)
 const editingGroupCategoryId = ref(null)
 const draggedSiteId = ref(null)
 const dropTargetGroupId = ref(null)
 const fileInput = ref(null)
+const selectedSiteIds = ref(new Set())
 
 // 每个分类已展开的数量
 const expanded = ref({})
@@ -334,6 +345,12 @@ function handleVisibility() {
 let lastSaveError = ''
 let remoteSaveChain = Promise.resolve()
 
+// navigation_data 是严格的 JSON 文档。JSON 往返既是安全的深拷贝，
+// 也不会把 Vue 的响应式代理传给 structuredClone。
+function createNavigationSnapshot(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 async function persist(snapshot, userId) {
   const result = saveData(snapshot, userId)
   if (result.ok) {
@@ -376,7 +393,7 @@ async function persist(snapshot, userId) {
 }
 
 async function persistNow() {
-  const snapshot = structuredClone(toRaw(data.value))
+  const snapshot = createNavigationSnapshot(data.value)
   const local = saveData(snapshot, activeUserId)
   if (!local.ok) throw new Error(local.error)
   if (!activeUserId) return false
@@ -408,7 +425,7 @@ watch(
   newVal => {
     if (activeUserId && !hydratingData) {
       // 防止排队期间继续修改响应式对象，导致请求内容随引用变化。
-      debouncedPersist(structuredClone(toRaw(newVal)), activeUserId)
+      debouncedPersist(createNavigationSnapshot(newVal), activeUserId)
     }
   },
   { deep: true }
@@ -496,6 +513,16 @@ const filteredCategories = computed(() => {
 const visibleSiteCount = computed(() =>
   filteredCategories.value.reduce((sum, category) => sum + category.sites.length, 0)
 )
+
+const totalSiteCount = computed(() =>
+  data.value.categories.reduce((sum, category) => sum + category.sites.length, 0)
+)
+
+const movingSites = computed(() => {
+  if (movingSiteIds.value.length === 0) return []
+  const ids = new Set(movingSiteIds.value)
+  return data.value.categories.flatMap(category => category.sites.filter(site => ids.has(site.id)))
+})
 
 const collectionTitle = computed(() => {
   if (activeKeyword.value) return `“${activeKeyword.value}”的搜索结果`
@@ -693,6 +720,7 @@ async function handleDeleteSite(categoryId, siteId) {
   if (!ok) return
 
   cat.sites = cat.sites.filter(s => s.id !== siteId)
+  if (selectedSiteIds.value.has(siteId)) toggleSiteSelection(siteId)
   toast.success('已删除')
 }
 
@@ -740,6 +768,9 @@ async function handleDeleteCategory(categoryId) {
   if (!ok) return
 
   data.value.categories = data.value.categories.filter(c => c.id !== categoryId)
+  const nextSelection = new Set(selectedSiteIds.value)
+  for (const site of cat.sites) nextSelection.delete(site.id)
+  selectedSiteIds.value = nextSelection
   if (activeCategoryId.value === categoryId) activeCategoryId.value = null
   delete expanded.value[categoryId]
   toast.success('已删除')
@@ -749,14 +780,56 @@ async function handleDeleteCategory(categoryId) {
 function showMoveModal(site, fromCategoryId) {
   movingSite.value = site
   movingSiteFromCategoryId.value = fromCategoryId
+  movingSiteIds.value = []
+  moveModalVisible.value = true
+}
+
+function toggleSiteSelection(siteId) {
+  const next = new Set(selectedSiteIds.value)
+  if (next.has(siteId)) next.delete(siteId)
+  else next.add(siteId)
+  selectedSiteIds.value = next
+}
+
+function clearSelection() {
+  selectedSiteIds.value = new Set()
+}
+
+function showBulkMoveModal() {
+  if (selectedSiteIds.value.size === 0) return
+  movingSite.value = null
+  movingSiteFromCategoryId.value = null
+  movingSiteIds.value = [...selectedSiteIds.value]
   moveModalVisible.value = true
 }
 
 function handleMoveSite({ targetCategoryId, targetGroupId }) {
-  const fromCat = data.value.categories.find(c => c.id === movingSiteFromCategoryId.value)
   const targetCat = data.value.categories.find(c => c.id === targetCategoryId)
-  if (!fromCat || !targetCat) return
+  if (!targetCat) return
   if (!targetCat.groups.some(group => group.id === targetGroupId)) return
+
+  if (movingSiteIds.value.length > 0) {
+    const ids = new Set(movingSiteIds.value)
+    const sites = []
+    for (const category of data.value.categories) {
+      const retained = []
+      for (const site of category.sites) {
+        if (ids.has(site.id)) sites.push(site)
+        else retained.push(site)
+      }
+      category.sites = retained
+    }
+    if (sites.length === 0) return
+    targetCat.sites.push(...sites.map(site => ({ ...site, groupId: targetGroupId })))
+    moveModalVisible.value = false
+    clearSelection()
+    movingSiteIds.value = []
+    toast.success(`已将 ${sites.length} 个网站移动到「${targetCat.name}」`)
+    return
+  }
+
+  const fromCat = data.value.categories.find(c => c.id === movingSiteFromCategoryId.value)
+  if (!fromCat || !movingSite.value) return
 
   const idx = fromCat.sites.findIndex(s => s.id === movingSite.value.id)
   if (idx === -1) return
@@ -1156,5 +1229,31 @@ async function handleFileSelected(e) {
   .group-actions {
     opacity: 1;
   }
+}
+</style>
+
+<style scoped>
+.app-shell { min-height: 100dvh; background: var(--bg-primary); }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 1000; transform: translateY(-150%); background: var(--accent); color: var(--on-accent); padding: 10px 14px; border-radius: 6px; }
+.skip-link:focus { transform: translateY(0); }
+.topbar { min-height: 68px; display: flex; align-items: center; gap: 24px; padding: 10px clamp(16px, 4vw, 64px); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg-primary) 92%, transparent); backdrop-filter: blur(18px); position: sticky; top: 0; z-index: 30; }
+.wordmark { display: inline-flex; align-items: center; gap: 10px; color: var(--text-primary); font-family: 'DM Mono', ui-monospace, monospace; font-size: 14px; font-weight: 700; letter-spacing: 0; }.wordmark-mark { width: 28px; height: 28px; display: grid; place-items: center; color: var(--on-accent); background: var(--accent); border-radius: 6px; font-family: inherit; }.sync-state { color: var(--text-muted); font-family: 'DM Mono', ui-monospace, monospace; font-size: 11px; margin-right: auto; }.sync-state span { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--success); }.topbar-actions { display: flex; align-items: center; gap: 4px; }.utility-btn { min-height: 36px; padding-inline: 10px; font-size: 12px; }.theme-button, .account-button { min-height: 36px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); }.theme-button { width: 36px; border-radius: 6px; font-size: 12px; }.account-button { display: inline-flex; align-items: center; gap: 8px; padding: 4px 9px 4px 5px; margin-left: 4px; border-radius: 6px; font-size: 12px; }.account-avatar { display: grid; place-items: center; width: 26px; height: 26px; background: var(--accent-light); color: var(--accent); font-weight: 700; border-radius: 4px; }
+.workspace { width: min(1600px, 100%); margin: 0 auto; padding: clamp(24px, 4vw, 56px) clamp(16px, 4vw, 64px) 72px; }.command-deck { display: grid; grid-template-columns: minmax(190px, .85fr) minmax(250px, 1.5fr) auto; align-items: center; gap: 24px; padding: 0 0 32px; border-bottom: 1px solid var(--border); }.kicker, .group-label { color: var(--accent); font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; }.command-title h1 { font-size: clamp(25px, 3vw, 38px); line-height: 1.15; margin-top: 6px; letter-spacing: 0; }.command-deck .search-bar { height: 50px; max-width: none; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: none; transition: border-color .18s ease, box-shadow .18s ease; }.command-deck .search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }.command-deck .search-icon { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; font-family: 'DM Mono', ui-monospace, monospace; font-size: 12px; opacity: 1; }.search-input { outline: 0; }.add-site { min-height: 50px; padding-inline: 18px; }
+.category-rail { display: flex; align-items: stretch; gap: 8px; padding: 18px 0 28px; overflow-x: auto; border-bottom: 1px solid var(--border); scrollbar-width: thin; }.category-tab-wrap { position: relative; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); transition: border-color .18s, background .18s; }.category-tab-wrap.active, .category-tab-wrap:hover { border-color: var(--accent); }.category-tab { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; color: var(--text-secondary); font-size: 13px; white-space: nowrap; }.category-tab:hover, .category-tab:focus-visible, .category-tab-wrap.active .category-tab { color: var(--text-primary); }.category-tab-wrap.active .category-tab { font-weight: 700; }.category-tab b { display: grid; min-width: 20px; height: 20px; place-items: center; padding: 0 5px; background: var(--bg-tertiary); color: var(--text-muted); border-radius: 3px; font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; font-weight: 500; }.category-tab-icon { max-width: 20px; overflow: hidden; }.all-tab { border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); }.all-tab.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); font-weight: 700; }.all-tab.active b { background: color-mix(in srgb, var(--on-accent) 18%, transparent); color: var(--on-accent); }.category-tab-actions { display: none; gap: 2px; position: absolute; inset: calc(100% + 4px) auto auto 0; z-index: 10; padding: 4px; background: var(--bg-secondary); border: 1px solid var(--border); box-shadow: var(--shadow-lg); border-radius: 5px; }.category-tab-wrap:hover .category-tab-actions, .category-tab-actions:focus-within { display: flex; }.category-tab-actions button { min-height: 32px; padding: 0 8px; border-radius: 3px; color: var(--text-secondary); font-size: 11px; }.category-tab-actions button:hover { background: var(--bg-tertiary); color: var(--text-primary); }.new-category { min-height: 42px; flex: 0 0 auto; padding: 0 12px; color: var(--accent); border: 1px dashed color-mix(in srgb, var(--accent) 65%, var(--border)); border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }.new-category:hover { background: var(--accent-light); }
+.content { width: auto; padding: 36px 0 0; }.collection-summary { display: flex; align-items: end; justify-content: space-between; gap: 20px; padding-bottom: 28px; margin: 0; }.collection-summary h1 { font-size: 22px; line-height: 1.2; letter-spacing: 0; }.collection-meta, .workspace-hint { color: var(--text-muted); font-size: 12px; margin-top: 7px; }.workspace-hint { font-family: 'DM Mono', ui-monospace, monospace; text-align: right; }.category-section { margin-bottom: 50px; }.category-header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }.category-title { font-size: 17px; }.site-count { padding: 2px 7px; border: 1px solid var(--border); border-radius: 3px; background: transparent; color: var(--text-muted); font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; font-weight: 500; }.btn-sm { min-height: 34px; padding: 5px 9px; font-size: 12px; }.category-empty { padding: 24px; border: 1px dashed var(--border); color: var(--text-muted); font-size: 13px; }
+.selection-toolbar { position: sticky; top: 78px; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: fit-content; min-width: 260px; padding: 7px 8px 7px 12px; margin: -12px 0 20px; background: color-mix(in srgb, var(--bg-secondary) 96%, transparent); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 20px color-mix(in srgb, var(--text-primary) 12%, transparent); color: var(--text-secondary); font-size: 12px; }.selection-count { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }.selection-count b { display: grid; min-width: 21px; height: 21px; place-items: center; padding: 0 5px; color: var(--on-accent); background: var(--accent); border-radius: 3px; font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; }.selection-toolbar > div { display: flex; gap: 4px; }.selection-toolbar .btn { min-height: 32px; }
+.group-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }.group-section { min-width: 0; margin: 0; padding: 18px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 7px; transition: border-color .18s, transform .18s, background .18s; }.group-section.is-drop-target { border-color: var(--accent); background: var(--accent-light); transform: translateY(-2px); }.group-header { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }.group-header h3 { display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--text-primary); }.group-header h3 span { display: grid; min-width: 22px; height: 20px; place-items: center; padding: 0 5px; background: var(--bg-tertiary); border-radius: 3px; color: var(--text-muted); font-family: 'DM Mono', ui-monospace, monospace; font-size: 10px; }.group-actions { opacity: .55; }.group-section:hover .group-actions, .group-actions:focus-within { opacity: 1; }.group-action { min-width: 34px; min-height: 34px; padding: 0 7px; width: auto; height: auto; border-radius: 4px; font-size: 12px; }.site-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }.group-empty { min-height: 92px; margin: 0; border-radius: 4px; }.load-more { margin-top: 16px; }
+@media (max-width: 800px) { .topbar { gap: 12px; }.sync-state, .account-button > span:last-child { display: none; }.command-deck { grid-template-columns: 1fr auto; gap: 16px; }.command-deck .search-bar { grid-column: 1 / -1; grid-row: 2; }.collection-summary { align-items: flex-start; flex-direction: column; }.workspace-hint { text-align: left; }.group-list { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .topbar { padding-inline: 14px; }.utility-btn { display: none; }.workspace { padding: 24px 14px 48px; }.command-title h1 { font-size: 26px; }.add-site { padding-inline: 12px; }.category-rail { margin-inline: -14px; padding-inline: 14px; }.category-header { align-items: flex-start; flex-wrap: wrap; }.category-header-actions { margin-left: 0; }.group-section { padding: 14px; } }
+@media (prefers-reduced-motion: reduce) { .group-section, .category-tab-wrap { transition: none; }.group-section.is-drop-target { transform: none; } }
+</style>
+
+<style scoped>
+/* 分组顺着页面向下展开，网站在各分组内横向扫描。 */
+.group-list { grid-template-columns: 1fr; gap: 20px; }
+.group-section { padding: 20px; }
+.site-grid { grid-template-columns: repeat(auto-fill, minmax(245px, 1fr)); gap: 10px; }
+@media (max-width: 600px) {
+  .site-grid { grid-template-columns: 1fr; }
 }
 </style>
